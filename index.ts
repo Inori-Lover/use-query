@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useLocation, useHistory } from "react-router-dom";
-import type { MergeFunc, Config, UseQueryReturn } from "./type";
+import type { mapToState, mapToQuery, Config, UseQueryReturn } from "./type";
 import {
   useSyncRef,
   useStaticFunc,
@@ -17,47 +17,56 @@ import {
   defaultStringifyOptions,
 } from "./util";
 
-const defaultQuery = {};
+/** 默认映射函数，保证返回的是可取值的避免取值报错 */
+const defaultMapFunc = (i: any) => i ?? {};
+
 /** 管理url上的search参数 */
-export function useQuery<State extends ParsedQuery<string | number | boolean>>(
-  /** 处理url上的query参数为完整的State，比如合并本地的form等; 注意memo化 */
-  mergeFunc: MergeFunc<State>,
+export function useQuery<
+  Query extends ParsedQuery<string | number | boolean>,
+  State extends { [key: string]: unknown } = Query
+>(
+  /** 处理url上的query参数为完整的State，比如合并本地的form等 */
+  mapToState: mapToState<Query, State> = defaultMapFunc,
+  /** 处理url上的query参数为完整的State，比如合并本地的form等 */
+  mapToQuery: mapToQuery<Query, State> = defaultMapFunc,
   /** 序列化相关配置 */
-  config: Config
+  config?: Config
 ): UseQueryReturn<State> {
-  const { syncMethod = "REPLACE" } = config;
+  const {
+    syncMethod = "REPLACE",
+    parseOptions = defaultParseOptions,
+    stringifyOptions = defaultStringifyOptions,
+  } = config ?? {};
   const history = useHistory();
   const location = useLocation();
 
-  /** 静态化的mergeFunc */
-  const merge = useStaticFunc(mergeFunc);
+  /** 静态化的mapToState */
+  const toState = useStaticFunc(mapToState);
+  /** 静态化的mapToQuery */
+  const toQuery = useStaticFunc(mapToQuery);
 
-  const parseOptionsRef = useSyncRef(
-    config.parseOptions ?? defaultParseOptions
-  );
-  const stringifyOptionsRef = useSyncRef(
-    config.stringifyOptions ?? defaultStringifyOptions
-  );
+  const parseOptionsRef = useSyncRef(parseOptions);
+  const stringifyOptionsRef = useSyncRef(stringifyOptions);
 
   const [state, setState] = useState<State>(() =>
-    merge(
-      defaultQuery,
-      parse(location.search, parseOptionsRef.current) as Partial<State>
+    toState(
+      undefined,
+      parse(location.search, parseOptionsRef.current) as Partial<Query>
     )
   );
   /** 当前query的ref */
-  const queryRef = useRef<Partial<State>>(defaultQuery);
+  const queryRef = useRef<Partial<Query>>();
 
   /** 将指定的state同步到url */
   const syncNewStateToURL = useCallback(
     (nextState: State) => {
-      const nextQueryString = stringify(nextState, stringifyOptionsRef.current);
+      const nextQuery = toQuery(queryRef.current, nextState);
+      const nextQueryString = stringify(nextQuery, stringifyOptionsRef.current);
       const nextLocation = {
         pathname: location.pathname,
         state: location.state,
         hash: location.hash,
         search: nextQueryString,
-        key: undefined,
       };
 
       switch (syncMethod) {
@@ -74,7 +83,7 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
         }
       }
 
-      queryRef.current = nextState;
+      queryRef.current = nextQuery;
     },
     [
       history,
@@ -83,11 +92,26 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
       location.state,
       stringifyOptionsRef,
       syncMethod,
+      toQuery,
     ]
   );
 
-  /** 修改state */
-  const update: Dispatch<SetStateAction<State>> = useCallback(
+  /** 同步query到state */
+  useEffect(() => {
+    const query = parse(
+      location.search,
+      parseOptionsRef.current
+    ) as Partial<Query>;
+
+    setState((pre) => toState(pre, query));
+  }, [location.search, parseOptionsRef, toState]);
+
+  /**
+   * 修改state
+   *
+   * 这里不会写入state而是直接写入query，意在简化数据流向；并减少一次无谓的re-render
+   */
+  const updateState: Dispatch<SetStateAction<State>> = useCallback(
     (action) => {
       setState((pre) => {
         let nextState = pre;
@@ -97,25 +121,17 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
           nextState = action;
         }
 
+        // 把更新操作重定向到url上
         syncNewStateToURL(nextState);
 
-        return nextState;
+        // return 一样的，不更新
+        return pre;
       });
     },
     [syncNewStateToURL]
   );
 
-  /** 同步search到state */
-  useEffect(() => {
-    const query = parse(
-      location.search,
-      parseOptionsRef.current
-    ) as Partial<State>;
-
-    update(merge(queryRef.current, query));
-  }, [location.search, merge, parseOptionsRef, update]);
-
-  return [state, update];
+  return [state, updateState];
 }
 
 export { ParsedQuery };
