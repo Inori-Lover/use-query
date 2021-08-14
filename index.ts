@@ -1,10 +1,18 @@
 import type { ParsedQuery } from "query-string";
 import { parse, stringify } from "query-string";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  Dispatch,
+  SetStateAction,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useHistory } from "react-router-dom";
-import type { MergeFunc, SetState, Config, UseQueryReturn } from "./type";
+import type { MergeFunc, Config, UseQueryReturn } from "./type";
 import {
   useSyncRef,
+  useStaticFunc,
   defaultParseOptions,
   defaultStringifyOptions,
 } from "./util";
@@ -17,9 +25,12 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
   /** 序列化相关配置 */
   config: Config
 ): UseQueryReturn<State> {
-  const { syncAction = "REPLACE" } = config;
+  const { syncMethod = "REPLACE" } = config;
   const history = useHistory();
   const location = useLocation();
+
+  /** 静态化的mergeFunc */
+  const merge = useStaticFunc(mergeFunc);
 
   const parseOptionsRef = useSyncRef(
     config.parseOptions ?? defaultParseOptions
@@ -28,27 +39,17 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
     config.stringifyOptions ?? defaultStringifyOptions
   );
 
-  /** 初始state */
-  const defaultState = useMemo(
-    () =>
-      merge(
-        defaultQuery,
-        parse(location.search, parseOptionsRef.current) as Partial<State>,
-        undefined
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+  const [state, setState] = useState<State>(() =>
+    merge(
+      defaultQuery,
+      parse(location.search, parseOptionsRef.current) as Partial<State>
+    )
   );
-
-  /** 当前state的ref */
-  const stateRef = useRef<State>(defaultState);
   /** 当前query的ref */
   const queryRef = useRef<Partial<State>>(defaultQuery);
-  /** 静态化的mergeFunc */
-  const merge = useSyncRef<MergeFunc<State>>(mergeFunc).current;
 
   /** 将指定的state同步到url */
-  const sync = useCallback(
+  const syncNewStateToURL = useCallback(
     (nextState: State) => {
       const nextQueryString = stringify(nextState, stringifyOptionsRef.current);
       const nextLocation = {
@@ -59,7 +60,7 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
         key: undefined,
       };
 
-      switch (syncAction) {
+      switch (syncMethod) {
         case "PUSH": {
           history.push(nextLocation);
           break;
@@ -74,7 +75,6 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
       }
 
       queryRef.current = nextState;
-      stateRef.current = nextState;
     },
     [
       history,
@@ -82,36 +82,40 @@ export function useQuery<State extends ParsedQuery<string | number | boolean>>(
       location.pathname,
       location.state,
       stringifyOptionsRef,
-      syncAction,
+      syncMethod,
     ]
   );
 
-  /** 监听search变化并同步到state */
-  useEffect(() => {
-    // 为了减少理解难度，这里不做优化；不优化的后果就是多调用一次merge而已，多次sync不会导致search多次变化
-    // // 如果state和query已经同步，代表本次search变化是内部触发的；跳过
-    // if (stateRef.current === queryRef.current) {
-    //   return;
-    // }
+  /** 修改state */
+  const update: Dispatch<SetStateAction<State>> = useCallback(
+    (action) => {
+      setState((pre) => {
+        let nextState = pre;
+        if (typeof action === "function") {
+          nextState = action(pre);
+        } else {
+          nextState = action;
+        }
 
+        syncNewStateToURL(nextState);
+
+        return nextState;
+      });
+    },
+    [syncNewStateToURL]
+  );
+
+  /** 同步search到state */
+  useEffect(() => {
     const query = parse(
       location.search,
       parseOptionsRef.current
     ) as Partial<State>;
 
-    sync(merge(queryRef.current, query, stateRef.current));
-  }, [location.search, merge, parseOptionsRef, sync]);
+    update(merge(queryRef.current, query));
+  }, [location.search, merge, parseOptionsRef, update]);
 
-  /** 修改query */
-  const setState: SetState<State> = useCallback(
-    (reducer: (prevState: State) => State) => {
-      const nextState = reducer(stateRef.current);
-      sync(nextState);
-    },
-    [sync]
-  );
-
-  return [stateRef.current, setState];
+  return [state, update];
 }
 
 export { ParsedQuery };

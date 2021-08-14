@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { ParseOptions, StringifyOptions } from "query-string";
 
 /** 将某个值同步设置到一个ref中 */
@@ -6,6 +6,17 @@ export function useSyncRef<Value>(val: Value) {
   const ref = useRef(val);
   ref.current = val;
   return ref;
+}
+
+/** 将某个值同步设置到一个ref中 */
+export function useStaticFunc<Func extends (...args: any) => any>(func: Func) {
+  const ref = useRef(func);
+  ref.current = func;
+
+  return useCallback((...args: Parameters<Func>) => {
+    const { current } = ref;
+    return current(...args);
+  }, []);
 }
 
 export const defaultParseOptions: ParseOptions = {
