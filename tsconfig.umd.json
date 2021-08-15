@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "UMD",
+    "outDir": "umd",
+    "declarationDir": "umd",
+    "lib": ["ES5", "ES2015.Collection"]
+  }
+}
