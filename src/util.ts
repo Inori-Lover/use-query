@@ -9,7 +9,9 @@ export function useSyncRef<Value>(val: Value) {
 }
 
 /** 将某个值同步设置到一个ref中 */
-export function useStaticFunc<Func extends (...args: any) => any>(func: Func) {
+export function useStaticFunc<Func extends (...args: any[]) => any>(
+  func: Func
+) {
   const ref = useRef(func);
   ref.current = func;
 

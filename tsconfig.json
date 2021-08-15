@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "alwaysStrict": true,
+    "moduleResolution": "node",
+    "target": "ESNext",
+    "module": "ESNext",
+    "rootDir": "src",
+    "outDir": "esm",
+    "sourceMap": true,
+    "sourceRoot": "."
+  }
+}
