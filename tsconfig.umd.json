@@ -4,7 +4,9 @@
     "target": "ES5",
     "module": "UMD",
     "outDir": "umd",
-    "declarationDir": "umd",
+    "declaration": false,
+    "declarationDir": null,
+    "declarationMap": false,
     "lib": ["ES5", "ES2015.Collection"]
   }
 }
