@@ -8,6 +8,10 @@
     "rootDir": "src",
     "outDir": "esm",
     "sourceMap": true,
-    "sourceRoot": "."
+    "sourceRoot": ".",
+    "declaration": true,
+    "declarationDir": "esm",
+    "declarationMap": true,
+    "importHelpers": true
   }
 }

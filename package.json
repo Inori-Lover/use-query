@@ -1,20 +1,28 @@
 {
   "name": "use-query",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "manage url query",
+  "source": "src/index.ts",
+  "types": "esm/index.d.ts",
+  "module": "esm/index.js",
   "scripts": {
-    "build": "tsc"
+    "clean:esm": "del-cli esm/* !.gitignore",
+    "clean": "npm run clean:esm",
+    "build": "npm run clean && tsc"
   },
-  "keywords": [],
+  "keywords": [
+    "params",
+    "query"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@types/react": "^17.0.17",
     "@types/react-dom": "^17.0.9",
     "@types/react-router-dom": "^5.1.8",
     "@typescript-eslint/eslint-plugin": "^4.29.1",
     "@typescript-eslint/parser": "^4.29.1",
+    "del-cli": "^4.0.1",
     "eslint": "^7.32.0",
     "eslint-plugin-react-hooks": "^4.2.0",
     "prettier": "^2.3.2",
