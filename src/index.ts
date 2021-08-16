@@ -40,6 +40,8 @@ export function useQuery<
   const history = useHistory();
   const location = useLocation();
 
+  /** 标记此次search是我们内部触发的，内部触发的不需要再次从search解析同步回state */
+  const changeByUsRef = useRef(false);
   /** 静态化的mapToState */
   const toState = useStaticFunc(mapToState);
   /** 静态化的mapToQuery */
@@ -57,7 +59,7 @@ export function useQuery<
   /** 当前query的ref */
   const queryRef = useRef<Partial<Query>>();
 
-  /** 将指定的state同步到url */
+  /** 使用指定 syncMethod 将新的 state 同步到url并更新 queryRef */
   const syncNewStateToURL = useCallback(
     (nextState: State) => {
       const nextQuery = toQuery(queryRef.current, nextState);
@@ -96,8 +98,14 @@ export function useQuery<
     ]
   );
 
-  /** 同步query到state */
+  /** 监听 query 并同步 query 到 state */
   useEffect(() => {
+    /** 如果这次改变是我们触发的，那么state和query已经同步，不需要再同步一次 */
+    if (changeByUsRef.current) {
+      changeByUsRef.current = false;
+      return;
+    }
+
     const query = parse(
       location.search,
       parseOptionsRef.current
@@ -106,11 +114,7 @@ export function useQuery<
     setState((pre) => toState(pre, query));
   }, [location.search, parseOptionsRef, toState]);
 
-  /**
-   * 修改state
-   *
-   * 这里不会写入state而是直接写入query，意在简化数据流向；并减少一次无谓的re-render
-   */
+  /** 修改state */
   const updateState: Dispatch<SetStateAction<State>> = useCallback(
     (action) => {
       setState((pre) => {
@@ -124,8 +128,9 @@ export function useQuery<
         // 把更新操作重定向到url上
         syncNewStateToURL(nextState);
 
-        // return 一样的，不更新
-        return pre;
+        changeByUsRef.current = true;
+
+        return nextState;
       });
     },
     [syncNewStateToURL]
