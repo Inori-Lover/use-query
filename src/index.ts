@@ -1,20 +1,20 @@
 import type { ParsedQuery } from "query-string";
 import { parse, stringify } from "query-string";
-import {
-  useCallback,
-  useEffect,
-  Dispatch,
-  SetStateAction,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useHistory } from "react-router-dom";
-import type { mapToState, mapToQuery, Config, UseQueryReturn } from "./type";
+import {
+  mapToState,
+  mapToQuery,
+  Config,
+  UseQueryReturn,
+  DispatchQuery,
+  LocationSyncMethod,
+} from "./type";
 import {
   useSyncRef,
   useStaticFunc,
-  defaultParseOptions,
-  defaultStringifyOptions,
+  getDefaultParseOptions,
+  getDefaultStringifyOptions,
 } from "./util";
 
 /** 默认映射函数，保证返回的是可取值的避免取值报错 */
@@ -25,17 +25,15 @@ export function useQuery<
   Query extends ParsedQuery<string | number | boolean>,
   State extends { [key: string]: unknown } = Query
 >(
-  /** 处理url上的query参数为完整的State，比如合并本地的form等 */
-  mapToState: mapToState<Query, State> = defaultMapFunc,
-  /** 处理url上的query参数为完整的State，比如合并本地的form等 */
-  mapToQuery: mapToQuery<Query, State> = defaultMapFunc,
-  /** 序列化相关配置 */
-  config?: Config
+  INIT: State | (() => State),
+  config?: Config<Query, State>
 ): UseQueryReturn<State> {
   const {
-    syncMethod = "REPLACE",
-    parseOptions = defaultParseOptions,
-    stringifyOptions = defaultStringifyOptions,
+    syncMethod = LocationSyncMethod.REPLACE,
+    parseOptions = getDefaultParseOptions(),
+    stringifyOptions = getDefaultStringifyOptions(),
+    mapToState = defaultMapFunc,
+    mapToQuery = defaultMapFunc,
   } = config ?? {};
   const history = useHistory();
   const location = useLocation();
@@ -43,26 +41,29 @@ export function useQuery<
   /** 标记此次search是我们内部触发的，内部触发的不需要再次从search解析同步回state */
   const changeByUsRef = useRef(false);
   /** 静态化的mapToState */
-  const toState = useStaticFunc(mapToState);
+  const toState = useStaticFunc<mapToState<Query, State>>(mapToState);
   /** 静态化的mapToQuery */
-  const toQuery = useStaticFunc(mapToQuery);
+  const toQuery = useStaticFunc<mapToQuery<Query, State>>(mapToQuery);
 
   const parseOptionsRef = useSyncRef(parseOptions);
   const stringifyOptionsRef = useSyncRef(stringifyOptions);
 
+  // 通过useState实现初始化参数的传入，减少自造轮子
+  const [initState] = useState(INIT);
+
   const [state, setState] = useState<State>(() =>
     toState(
-      undefined,
-      parse(location.search, parseOptionsRef.current) as Partial<Query>
+      parse(location.search, parseOptionsRef.current) as Partial<Query>,
+      initState
     )
   );
   /** 当前query的ref */
-  const queryRef = useRef<Partial<Query>>();
+  const queryRef = useRef<Partial<Query>>({});
 
   /** 使用指定 syncMethod 将新的 state 同步到url并更新 queryRef */
   const syncNewStateToURL = useCallback(
-    (nextState: State) => {
-      const nextQuery = toQuery(queryRef.current, nextState);
+    (nextState: State, nextSyncMethod: LocationSyncMethod) => {
+      const nextQuery = toQuery(nextState, queryRef.current);
       const nextQueryString = stringify(nextQuery, stringifyOptionsRef.current);
       const nextLocation = {
         pathname: location.pathname,
@@ -71,12 +72,12 @@ export function useQuery<
         search: nextQueryString,
       };
 
-      switch (syncMethod) {
-        case "PUSH": {
+      switch (nextSyncMethod) {
+        case LocationSyncMethod.PUSH: {
           history.push(nextLocation);
           break;
         }
-        case "REPLACE": {
+        case LocationSyncMethod.REPLACE: {
           history.replace(nextLocation);
           break;
         }
@@ -93,7 +94,6 @@ export function useQuery<
       location.pathname,
       location.state,
       stringifyOptionsRef,
-      syncMethod,
       toQuery,
     ]
   );
@@ -111,12 +111,12 @@ export function useQuery<
       parseOptionsRef.current
     ) as Partial<Query>;
 
-    setState((pre) => toState(pre, query));
+    setState((pre) => toState(query, pre));
   }, [location.search, parseOptionsRef, toState]);
 
   /** 修改state */
-  const updateState: Dispatch<SetStateAction<State>> = useCallback(
-    (action) => {
+  const updateState: DispatchQuery<State> = useCallback(
+    (action, nextSyncMethod = syncMethod) => {
       setState((pre) => {
         let nextState = pre;
         if (typeof action === "function") {
@@ -126,14 +126,14 @@ export function useQuery<
         }
 
         // 把更新操作重定向到url上
-        syncNewStateToURL(nextState);
+        syncNewStateToURL(nextState, nextSyncMethod);
 
         changeByUsRef.current = true;
 
         return nextState;
       });
     },
-    [syncNewStateToURL]
+    [syncMethod, syncNewStateToURL]
   );
 
   return [state, updateState];
