@@ -11,7 +11,8 @@
     "clean:umd": "del-cli umd/* !.gitignore",
     "clean:esm": "del-cli esm/* !.gitignore",
     "clean": "npm run clean:esm && npm run clean:umd",
-    "build": "npm run clean && tsc && tsc --project tsconfig.umd.json"
+    "build": "npm run clean && tsc && tsc --project tsconfig.umd.json",
+    "u": "ncu"
   },
   "keywords": [
     "params",
@@ -20,21 +21,22 @@
   "author": "inori",
   "license": "MIT",
   "devDependencies": {
-    "@types/react": "^17.0.17",
+    "@types/react": "^17.0.19",
     "@types/react-dom": "^17.0.9",
     "@types/react-router-dom": "^5.1.8",
-    "@typescript-eslint/eslint-plugin": "^4.29.1",
-    "@typescript-eslint/parser": "^4.29.1",
+    "@typescript-eslint/eslint-plugin": "^4.29.3",
+    "@typescript-eslint/parser": "^4.29.3",
     "del-cli": "^4.0.1",
     "eslint": "^7.32.0",
     "eslint-plugin-react-hooks": "^4.2.0",
+    "npm-check-updates": "^11.8.3",
     "prettier": "^2.3.2",
-    "typescript": "^4.3.5"
+    "typescript": "^4.4.2"
   },
   "dependencies": {
     "query-string": "^7.0.1",
     "react": "^17.0.2",
-    "react-router-dom": "^5.2.0",
+    "react-router-dom": "^5.2.1",
     "tslib": "^2.3.1"
   }
 }
